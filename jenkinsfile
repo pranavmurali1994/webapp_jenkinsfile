@@ -1,0 +1,99 @@
+pipeline {
+    agent { label 'master' }
+
+    environment {
+        REGISTRY     = "testproject.azurecr.io"
+        IMAGE_NAME   = "goapp"
+        CHART_PATH   = "./charts"
+        CHART_NAME   = "web"
+        KUBE_CONTEXT = "project-a"
+        IMAGE_TAG    = "latest"
+    }
+
+    stages {
+        stage('Prepare Workspace') {
+            steps {
+                script {
+                    deleteDir()
+                }
+            }
+        }
+        stage('Checkout') {
+            steps {
+                sshagent(['github-ssh']) {
+                    git branch: 'main', url: 'git@github.com:pranavmurali1994/webapp.git'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            when { expression { !params.HELM_ONLY } }
+            steps {
+                dir('Docker') { 
+                    sh """
+                    docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
+                    """
+                }
+            }
+        }
+
+        stage('Trivy Scan') {
+            when { expression { !params.HELM_ONLY } }
+            steps {
+                script {
+                    sh "trivy image $REGISTRY/$IMAGE_NAME:$IMAGE_TAG | tee trivy_scan_report.txt"
+        
+                    sh "zip trivy_scan_report.zip trivy_scan_report.txt"
+        
+                }
+                archiveArtifacts artifacts: 'trivy_scan_report.zip', fingerprint: true
+            }
+        }
+
+        stage('Login to ACR') {
+            when { expression { !params.HELM_ONLY } }
+            steps {
+                dir('Docker') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'acr-creds',
+                        usernameVariable: 'ACR_USER',
+                        passwordVariable: 'ACR_PASS'
+                    )]) {
+                        sh """
+                        docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Set App Version') {
+            steps {
+                script {
+                    COMMIT_ID = sh(returnStdout: true, script: "git log -1 --pretty=format:'%h-%cn' | tr ' ' '-'").trim()
+                    sh "sed -i 's|REPLACE_COMMIT_ID|${COMMIT_ID}|' charts/Chart.yaml"
+                    echo "Updated Chart.yaml appVersion to ${COMMIT_ID}"
+                }
+            }
+        }
+
+        stage('Set Kube Context') {
+            steps {
+                sh """
+                kubectl config use-context $KUBE_CONTEXT
+                """
+            }
+        }
+
+        stage('Helm Deploy') {
+            steps {
+                sh """
+                helm upgrade -i $CHART_NAME $CHART_PATH \
+                    --set image.repository=$REGISTRY/$IMAGE_NAME \
+                    --set image.tag=$IMAGE_TAG \
+                    --set appMessage="${params.APP_MESSAGE}"
+                """
+            }
+        }
+    }
+}
