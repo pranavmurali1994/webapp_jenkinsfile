@@ -89,6 +89,7 @@ pipeline {
             steps {
                 sh """
                 helm upgrade -i $CHART_NAME $CHART_PATH \
+                    -n demo \
                     --set image.repository=$REGISTRY/$IMAGE_NAME \
                     --set image.tag=$IMAGE_TAG \
                     --set appMessage="${params.APP_MESSAGE}"
