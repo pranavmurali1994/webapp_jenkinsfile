@@ -2,7 +2,7 @@ pipeline {
     agent { label 'master' }
 
     environment {
-        REGISTRY     = "testproject.azurecr.io"
+        REGISTRY     = "172.16.0.5:5000"
         IMAGE_NAME   = "goapp"
         CHART_PATH   = "./charts"
         CHART_NAME   = "web"
@@ -50,19 +50,13 @@ pipeline {
             }
         }
 
-        stage('Login to ACR') {
+        stage('Image Push to Private Registry') {
             when { expression { !params.HELM_ONLY } }
             steps {
                 dir('Docker') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'acr-creds',
-                        usernameVariable: 'ACR_USER',
-                        passwordVariable: 'ACR_PASS'
-                    )]) {
                         sh """
                         docker push $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
                         """
-                    }
                 }
             }
         }
