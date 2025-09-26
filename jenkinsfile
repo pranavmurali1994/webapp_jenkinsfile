@@ -6,7 +6,7 @@ pipeline {
         IMAGE_NAME   = "goapp"
         CHART_PATH   = "./charts"
         CHART_NAME   = "web"
-        KUBE_CONTEXT = "project-a"
+        KUBE_CONTEXT = "kubernetes-admin@kubernetes"
         IMAGE_TAG    = "latest"
     }
 
