@@ -71,24 +71,19 @@ pipeline {
             }
         }
 
-        stage('Set Kube Context') {
-            steps {
-                sh """
-                kubectl config use-context $KUBE_CONTEXT
-                """
-            }
-        }
-
         stage('Helm Deploy') {
-            steps {
-                sh """
+          steps {
+            withKubeConfig([credentialsId: 'kubeconfig']) {
+              sh """
                 helm upgrade -i $CHART_NAME $CHART_PATH \
-                    -n demo \
-                    --set image.repository=$REGISTRY/$IMAGE_NAME \
-                    --set image.tag=$IMAGE_TAG \
-                    --set appMessage="${params.APP_MESSAGE}"
-                """
+                  -n demo \
+                  --create-namespace \
+                  --set image.repository=$REGISTRY/$IMAGE_NAME \
+                  --set image.tag=$IMAGE_TAG \
+                  --set appMessage="${params.APP_MESSAGE}"
+              """
             }
+          }
         }
     }
 }
